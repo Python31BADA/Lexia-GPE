@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendario de Vencimientos - ONBC</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #f4f6f9;
+            padding: 20px;
+            color: #1e293b;
+            transition: background 0.3s, color 0.2s;
+        }
+        body.dark {
+            background: #0f172a;
+            color: #f1f5f9;
+        }
+        .card {
+            background: white;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+        }
+        body.dark .card {
+            background: #1e293b;
+            border-color: #334155;
+        }
+        h2 {
+            font-size: 1.3rem;
+            border-left: 4px solid #8b0000;
+            padding-left: 12px;
+            margin-bottom: 16px;
+        }
+        .calendario-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .calendario-header button {
+            background: #8b0000;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .calendario-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            text-align: center;
+        }
+        .cal-dia-nombre {
+            font-weight: 600;
+            padding: 8px;
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+        .cal-dia {
+            background: #f8fafc;
+            border-radius: 16px;
+            padding: 12px 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 70px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        body.dark .cal-dia {
+            background: #334155;
+            color: #f1f5f9;
+        }
+        .cal-dia:hover { background: #e2e8f0; transform: translateY(-2px); }
+        .cal-dia.otro-mes { opacity: 0.4; }
+        .cal-dia.hoy { border: 2px solid #8b0000; background: #fff0f0; }
+        .cal-dia.has-evento { background: #8b0000; color: white; }
+        .evento-count {
+            font-size: 0.7rem;
+            background: rgba(255,255,255,0.3);
+            padding: 2px 6px;
+            border-radius: 20px;
+        }
+        .lista-plazos { margin-top: 20px; max-height: 250px; overflow-y: auto; }
+        .plazo-item {
+            background: #f1f5f9;
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 8px;
+            border-left: 4px solid #8b0000;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        body.dark .plazo-item { background: #334155; }
+        .plazo-item:hover { background: #e2e8f0; transform: translateX(4px); }
+        .plazo-titulo { font-weight: 600; }
+        .plazo-expediente { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+        .fecha-seleccionada {
+            background: #e2e8f0;
+            padding: 8px 12px;
+            border-radius: 40px;
+            display: inline-block;
+            margin-bottom: 12px;
+            font-size: 0.85rem;
+        }
+        button {
+            background: #8b0000;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 40px;
+            cursor: pointer;
+            margin-top: 12px;
+            width: 100%;
+        }
+        button.cerrar { background: #64748b; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>📅 Calendario de Vencimientos</h2>
+        <div id="calendarioContainer">Cargando...</div>
+    </div>
+    <div class="card">
+        <h2>📋 Plazos del día</h2>
+        <div id="fechaSeleccionada" class="fecha-seleccionada">Selecciona un día</div>
+        <div id="listaPlazosDia" class="lista-plazos">Haz clic en un día para ver los plazos</div>
+    </div>
+    <div class="card">
+        <h2>⚡ Acciones</h2>
+        <button id="filtrarHoyBtn">📅 Filtrar expedientes con vencimiento hoy</button>
+        <button id="cerrarVentanaBtn" class="cerrar">✖️ Cerrar panel</button>
+    </div>
+    <script>
+        (function() {
+            // Estado local
+            let plazosData = [];
+            let fechaActual = new Date();
+
+            // Función para escapar HTML (local)
+            function escapeHtml(s) {
+                if (!s) return '';
+                const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+                return s.replace(/[&<>"']/g, m => map[m]);
+            }
+
+            // Solicitar plazos al proceso principal
+            function solicitarPlazos() {
+                if (window.electronAPI) {
+                    window.electronAPI.enviar('solicitar-plazos-calendario');
+                } else {
+                    // Datos de ejemplo para pruebas en navegador
+                    plazosData = [
+                        { id: 1, titulo: "Ejemplo 1", fechaVence: new Date().toISOString().split('T')[0], cumplido: false, expedienteId: 123 },
+                        { id: 2, titulo: "Ejemplo 2", fechaVence: new Date(Date.now() + 86400000).toISOString().split('T')[0], cumplido: false }
+                    ];
+                    renderizarCalendario();
+                }
+            }
+
+            // Renderizar el calendario
+            function renderizarCalendario() {
+                const year = fechaActual.getFullYear();
+                const month = fechaActual.getMonth();
+                const primerDia = new Date(year, month, 1);
+                const ultimoDia = new Date(year, month + 1, 0);
+                const diasEnMes = ultimoDia.getDate();
+                const inicioSemana = primerDia.getDay(); // 0 = Domingo
+                const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+                
+                let html = `
+                    <div class="calendario-header">
+                        <button id="prevMonthBtn">◀</button>
+                        <h3>${meses[month]} ${year}</h3>
+                        <button id="nextMonthBtn">▶</button>
+                    </div>
+                    <div class="calendario-grid">
+                `;
+                
+                // Días de la semana
+                ['D','L','M','M','J','V','S'].forEach(d => html += `<div class="cal-dia-nombre">${d}</div>`);
+                
+                // Celdas vacías al inicio
+                for (let i = 0; i < inicioSemana; i++) {
+                    html += `<div class="cal-dia otro-mes"></div>`;
+                }
+                
+                const hoyStr = new Date().toISOString().split('T')[0];
+                
+                // Días del mes
+                for (let d = 1; d <= diasEnMes; d++) {
+                    const fechaStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const plazosDia = plazosData.filter(p => p.fechaVence === fechaStr && !p.cumplido);
+                    const tieneEvento = plazosDia.length > 0;
+                    let clase = 'cal-dia';
+                    if (tieneEvento) clase += ' has-evento';
+                    if (fechaStr === hoyStr) clase += ' hoy';
+                    
+                    html += `
+                        <div class="${clase}" data-fecha="${fechaStr}">
+                            <span class="dia-numero">${d}</span>
+                            ${tieneEvento ? `<span class="evento-count">${plazosDia.length}</span>` : ''}
+                        </div>
+                    `;
+                }
+                
+                html += `</div>`;
+                document.getElementById('calendarioContainer').innerHTML = html;
+            }
+
+            // Actualizar lista de plazos para una fecha seleccionada
+            function actualizarListaPlazos(fecha) {
+                const fechaFormateada = new Date(fecha).toLocaleDateString();
+                document.getElementById('fechaSeleccionada').innerHTML = `📅 ${fechaFormateada}`;
+                
+                const plazos = plazosData.filter(p => p.fechaVence === fecha && !p.cumplido);
+                const cont = document.getElementById('listaPlazosDia');
+                
+                if (plazos.length === 0) {
+                    cont.innerHTML = '<div style="text-align:center; padding:20px;">✅ No hay plazos para este día</div>';
+                    return;
+                }
+                
+                cont.innerHTML = plazos.map(p => `
+                    <div class="plazo-item" data-expediente-id="${p.expedienteId || ''}">
+                        <div class="plazo-titulo">📌 ${escapeHtml(p.titulo)}</div>
+                        <div class="plazo-expediente">${p.expedienteId ? 'Expediente ID: ' + p.expedienteId : 'Sin expediente asociado'}</div>
+                    </div>
+                `).join('');
+            }
+
+            // ========== DELEGACIÓN DE EVENTOS ==========
+            function setupEventDelegation() {
+                // Contenedor del calendario
+                const calContainer = document.getElementById('calendarioContainer');
+                calContainer.addEventListener('click', (e) => {
+                    // Navegación de mes
+                    if (e.target.id === 'prevMonthBtn') {
+                        fechaActual.setMonth(fechaActual.getMonth() - 1);
+                        renderizarCalendario();
+                    } else if (e.target.id === 'nextMonthBtn') {
+                        fechaActual.setMonth(fechaActual.getMonth() + 1);
+                        renderizarCalendario();
+                    }
+                    
+                    // Click en un día del calendario
+                    const diaDiv = e.target.closest('[data-fecha]');
+                    if (diaDiv) {
+                        const fecha = diaDiv.dataset.fecha;
+                        actualizarListaPlazos(fecha);
+                    }
+                });
+
+                // Lista de plazos: click en un plazo para filtrar expediente
+                const listaPlazos = document.getElementById('listaPlazosDia');
+                listaPlazos.addEventListener('click', (e) => {
+                    const plazoItem = e.target.closest('.plazo-item');
+                    if (plazoItem) {
+                        const expedienteId = plazoItem.dataset.expedienteId;
+                        if (expedienteId && window.electronAPI) {
+                            window.electronAPI.enviar('filtrar-por-expediente', expedienteId);
+                        }
+                    }
+                });
+
+                // Botón "Filtrar hoy"
+                document.getElementById('filtrarHoyBtn').addEventListener('click', () => {
+                    const hoy = new Date().toISOString().split('T')[0];
+                    if (window.electronAPI) {
+                        window.electronAPI.enviar('filtrar-por-fecha', hoy);
+                    } else {
+                        alert('Filtrar expedientes con vencimiento hoy (modo demostración)');
+                    }
+                });
+
+                // Botón cerrar ventana
+                document.getElementById('cerrarVentanaBtn').addEventListener('click', () => {
+                    window.close();
+                });
+            }
+
+            // ========== CONFIGURACIÓN DE IPC ==========
+            function setupIPC() {
+                if (!window.electronAPI) return;
+
+                // Recibir plazos desde el proceso principal
+                window.electronAPI.recibir('enviar-plazos-calendario', (plazos) => {
+                    plazosData = plazos || [];
+                    renderizarCalendario();
+                    // Limpiar lista de plazos al cambiar datos
+                    document.getElementById('listaPlazosDia').innerHTML = 'Haz clic en un día para ver los plazos';
+                    document.getElementById('fechaSeleccionada').innerHTML = 'Selecciona un día';
+                });
+
+                // Solicitar plazos al abrir
+                solicitarPlazos();
+            }
+
+            // ========== TEMA OSCURO ==========
+            function setupTheme() {
+                if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                    document.body.classList.add('dark');
+                }
+                // Escuchar cambios
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                    document.body.classList.toggle('dark', e.matches);
+                });
+            }
+
+            // Inicialización
+            function init() {
+                setupTheme();
+                setupIPC();
+                setupEventDelegation();
+                // Renderizado inicial (si no hay IPC, se usan datos de ejemplo)
+                if (!window.electronAPI) {
+                    renderizarCalendario();
+                }
+            }
+
+            init();
+        })();
+    </script>
+</body>
+</html>

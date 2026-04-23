@@ -1,0 +1,45 @@
+{
+  "name": "lexia-gestor-expedientes",
+  "version": "3.0.0",
+  "type": "module",
+  "description": "Lexia · Gestor Profesional de Expedientes Jurídicos - 100% Offline",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.yonnathan.lexia",
+    "productName": "Lexia",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "ico"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/.cache",
+      "!dist",
+      "!backups",
+      "!*.md",
+      "!*.log"
+    ],
+    "forceCodeSigning": false
+  },
+  "keywords": [
+    "legal",
+    "expedientes",
+    "abogados",
+    "offline",
+    "electron",
+    "cuba"
+  ],
+  "author": "Yonnathan López Hernández",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.2.2",
+    "electron-builder": "^26.8.1"
+  }
+}
